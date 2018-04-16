@@ -3,6 +3,7 @@
 if [ "$#" -ne 2 ]; then
   error "First parameter should be a linux kernel path"
   error "Second parameter should be 'allmodules' or module list, ie. 'mod1 mod2 mod3'"
+  exit 128
 fi
 
 ### IMAGE_INIT: include utility functions
@@ -40,7 +41,7 @@ add_file /usr/lib/terminfo/l/linux
 add_file /usr/share/hwdata/pci.ids
 
 case "$2" in
-  "")
+  "allmodules")
     echo "NO specific modules defined, add all"
     add_all_modules '/'
     ;;
