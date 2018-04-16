@@ -1,0 +1,27 @@
+[Unit]
+Description=Debug unit
+Documentation=man:sulogin(8)
+DefaultDependencies=no
+Before=emergency.service shutdown.target
+Wants=systemd-vconsole-setup.service systemd-networkd.service systemd-resolved.service network-online.target basic.target
+After=sysinit.target systemd-vconsole-setup.service arcorefs.service
+
+[Service]
+Environment=HOME=/root
+Environment=TERM=xterm
+Environment=SUSHELL=/bin/bash
+WorkingDirectory=-/root
+ExecStartPre=-/bin/echo -e 'You are in dev mode. After logging in, type "journalctl -xb" to view\\nsystem logs, "systemctl reboot" to reboot, "systemctl default" or ^D to\\ntry again to boot into default mode.'
+#ExecStart=/bin/echo -e 'Debug shell !!\\nTEST !'
+#ExecStartPre=-/usr/bin/ls -l /etc
+#ExecStartPre=-/usr/bin/ls -l /usr/lib/systemd/system/sysinit.target.wants/
+#ExecStart=-/bin/sh -c "/usr/bin/systemctl --job-mode=fail --no-block default"
+#Type=idle
+ExecStart=-/bin/sh -c "/usr/bin/sulogin -e; /usr/bin/systemctl --job-mode=fail --no-block default"
+Type=idle
+StandardInput=tty-force
+StandardOutput=inherit
+StandardError=inherit
+KillMode=process
+IgnoreSIGPIPE=no
+SendSIGHUP=yes

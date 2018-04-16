@@ -1,0 +1,183 @@
+#!/bin/bash
+# Heavily inspired of archlinux mkinitcpio, using mkinitcpio functions
+if [ "$#" -ne 2 ]; then
+  error "First parameter should be a linux kernel path"
+  error "Second parameter should be 'allmodules' or module list, ie. 'mod1 mod2 mod3'"
+fi
+
+### IMAGE_INIT: include utility functions
+###             init BUILDROOT dir in a tmp dir with a basic unix file hierarchy
+###             - init _addedmodules a map of all already added module [modulename]=1 to avoid doing expensive stuff multiple time
+###                ( add_module toto will not do anything if already called )
+###             - init `_modpaths`: a list of every "path" of each module added with "add_module"
+###             initial _addedmodules contains module "builtin" in order to not add them to the image
+. ./mkinitrd_lib/image_init "$1"
+
+### IMAGE_BUILD: - use "add_binary" to add a binary and its lib dependency into BUILDROOT
+###              - use "add_symlink" to add a symlink into BUILDROOT
+###              - use "add_module" to search path and dependencies of a module and add them to _modpaths and _addedmodules
+###              - use "add_all_module" to search all modules of host and `add_module` them
+###              - use "add_dir" to create a simple directory in BUILDROOT
+###              - use "add_full_dir" to copy recursively a directory of host in BUILDROOT
+###              - use "add_udev_rule" to copy a udev rule file from udev searchpath into BUILDROOT, each udev program deps trigger an `add_binary`
+###              - use "add_systemd_unit" to copy a systemd unit file from systemd searchpath into BUILDROOT, each systemd deps trigger an other `add_systemd_unit`, each program deps a `add_binary`
+# Now... have fun and build your OS
+
+add_binary /bin/mount
+add_binary /usr/bin/kmod /usr/bin/modprobe
+add_binary /usr/lib/systemd/systemd /init
+add_binary /usr/bin/sulogin
+
+add_binary /usr/lib/initcpio/busybox /bin/busybox
+for applet in $(/usr/lib/initcpio/busybox --list | grep -v less); do
+    add_symlink "/usr/bin/$applet" busybox
+done
+
+add_file files/system.conf /etc/systemd/system.conf
+# for less color to work properly with default TERM=linux
+add_file /usr/lib/terminfo/l/linux
+# for lspci to find User readable hardware desc from kernel pci modalias
+add_file /usr/share/hwdata/pci.ids
+
+case "$2" in
+  "")
+    echo "NO specific modules defined, add all"
+    add_all_modules '/'
+    ;;
+  *)
+    for m in $2; do
+      echo "add module : "$m
+      add_module $m
+    done
+esac
+
+map add_binary \
+    bash \
+    less \
+    find \
+    getent \
+    pwck \
+    grpck \
+    lspci \
+    gzip \
+    tar \
+    curl \
+    mdadm \
+    mkfs.btrfs \
+    btrfs \
+    /usr/bin/networkctl \
+    /usr/bin/nologin \
+    /sbin/nologin \
+    /usr/bin/systemd-tmpfiles \
+    /usr/bin/journalctl \
+    /usr/lib/systemd/systemd-hibernate-resume \
+    /usr/lib/systemd/systemd-sulogin-shell \
+    /usr/lib/systemd/system-generators/systemd-fstab-generator \
+    /usr/lib/systemd/system-generators/systemd-gpt-auto-generator \
+    /usr/lib/systemd/system-generators/systemd-hibernate-resume-generator
+    /usr/lib/systemd/system-generators/systemd-getty-generator
+
+# for setup only !
+map add_binary \
+        loadkeys \
+        /usr/lib/systemd/systemd-vconsole-setup
+add_full_dir /usr/share/kbd/keymaps
+
+# udev rules and systemd units
+map add_udev_rule "$rules" \
+        50-udev-default.rules \
+        60-persistent-storage.rules \
+        63-md-raid-arrays.rules \
+        64-md-raid-assembly.rules \
+        64-btrfs.rules \
+        80-drivers.rules \
+        99-systemd.rules
+
+map add_systemd_unit \
+        initrd-cleanup.service \
+        initrd-fs.target \
+        initrd-parse-etc.service \
+        initrd-root-fs.target \
+        initrd-root-device.target \
+        initrd-switch-root.service \
+        initrd-switch-root.target \
+        initrd-udevadm-cleanup-db.service \
+        initrd.target \
+        kmod-static-nodes.service \
+        local-fs.target \
+        local-fs-pre.target \
+        paths.target \
+        reboot.target \
+        rescue.service \
+        emergency.service \
+        slices.target \
+        sockets.target \
+        swap.target \
+        systemd-fsck@.service \
+        systemd-hibernate-resume@.service \
+        systemd-sysusers.service \
+        systemd-journald.service \
+        systemd-journald-audit.socket \
+        systemd-journald-dev-log.socket \
+        systemd-modules-load.service \
+        systemd-tmpfiles-setup-dev.service \
+        systemd-udev-trigger.service \
+        systemd-udevd-control.socket \
+        systemd-udevd-kernel.socket \
+        systemd-udevd.service \
+        systemd-vconsole-setup.service \
+        timers.target \
+        rescue.target \
+        debug.service \
+        multi-user.target \
+        arcore.target \
+        arcorenet.service \
+        arcorefs.service \
+        arcore-wait-network.service \
+        systemd-networkd.service \
+        systemd-networkd-wait-online.service \
+        systemd-resolved.service \
+        emergency.target
+
+add_dir "/run/systemd/resolve"
+add_dir "/var/tmp"
+add_dir "/tmp"
+# for debugging, put rescue.target where you want
+#add_symlink "/usr/lib/systemd/system/default.target" "rescue.target"
+add_symlink "/usr/lib/systemd/system/default.target" "initrd.target"
+add_symlink "/usr/lib/systemd/system/ctrl-alt-del.target" "reboot.target"
+add_symlink "/etc/systemd/system/network-online.target.wants/arcore-wait-network.service" "/etc/systemd/system/arcore-wait-network.service"
+add_symlink "/etc/systemd/system/initrd-root-fs.target.wants/arcorefs.service" "/etc/systemd/system/arcorefs.service"
+add_symlink "/etc/resolv.conf" "/run/systemd/resolve/resolv.conf"
+
+# udev wants /etc/group since it doesn't launch with --resolve-names=never
+add_file "/etc/nsswitch.conf"
+add_file "files/os-release" "/etc/os-release"
+add_binary "$(readlink -f /usr/lib/libnss_files.so)"
+add_binary "$(readlink -f /usr/lib/libnss_compat.so)"
+add_binary "$(readlink -f /usr/lib/libnss_dns.so)"
+#add_binary "/usr/lib/libnss_systemd.so.2"
+add_binary "/usr/lib/libnss_mymachines.so.2"
+add_binary "/usr/lib/libnss_resolve.so.2"
+
+map add_binary \
+    arcore_net.sh \
+    arcore_fs.sh \
+    arcore_alert.sh
+
+# add system users through sysuser.services
+add_file /usr/lib/sysusers.d/basic.conf
+add_file /usr/lib/sysusers.d/systemd.conf
+
+add_systemd_drop_in systemd-udevd.service resolve-names <<EOF
+[Service]
+ExecStart=
+ExecStart=/usr/lib/systemd/systemd-udevd --resolve-names=never
+EOF
+
+add_dir "/etc/modules-load.d"
+# add static module to load in modules-load.d/xx.conf if needed
+
+### IMAGE_BUILD: Copy modules of _modpaths in BUILDROOT/lib/module/KERNELVERSION 
+###              then build archive BUILDROOT in a CPIO with bsdcpio and compress it
+. ./mkinitrd_lib/image_build build/arcore.img

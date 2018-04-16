@@ -1,0 +1,104 @@
+#!/bin/bash
+shopt -s extglob
+
+# needed files/directories
+. ./mkinitrd_lib/functions
+. ./mkinitrd_lib/systemd_functions
+_d_firmware=({/usr,}/lib/firmware/updates {/usr,}/lib/firmware)
+## _d_firmware directories containing all firwmares which can be added with "add_firmware"
+
+declare -A _addedmodules _modpaths
+## _addedmodules is a map of all already added module [modulename]=1 to avoid doing expensive stuff multiple time
+##   ( add_module toto will not do anything if already called )
+## _modpaths will keep every "path" of each module added with "add_module" in order to add them
+
+if [ -z "$1" ]; then
+  error "First parameter should be a linux kernel path"
+  return 1
+fi
+KERNELVERSION="$1"
+
+# export a sane PATH
+export PATH='./bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+# Sanitize environment further
+# GREP_OPTIONS="--color=always" will break everything
+# CDPATH can affect cd and pushd
+# LIBMOUNT_* options can affect findmnt and other tools
+unset GREP_OPTIONS CDPATH "${!LIBMOUNT_@}"
+
+cleanup() {
+    local err=${1:-$?}
+
+    if [[ $_d_workdir ]]; then
+        rm -rf "$_d_workdir"
+    fi
+
+    exit $err
+}
+
+resolve_kernver() {
+    local kernel=$1 arch=
+
+    if [[ -z $kernel ]]; then
+        uname -r
+        return 0
+    fi
+
+    if [[ ${kernel:0:1} != / ]]; then
+        echo "$kernel"
+        return 0
+    fi
+
+    arch=$(uname -m)
+    if [[ $arch != @(i?86|x86_64) ]]; then
+        error "kernel version extraction from image not supported for \`%s' architecture" "$arch"
+        return 1
+    fi
+
+    if [[ ! -e $kernel ]]; then
+        error "specified kernel image does not exist: \`%s'" "$kernel"
+        return 1
+    fi
+
+    kver "$kernel" && return
+
+    error "invalid kernel specified: \`%s'" "$1"
+
+    return 1
+}
+
+## On INT, clean directory return 130, on TERM, clean directory return 143
+trap 'cleanup 130' INT
+trap 'cleanup 143' TERM
+
+try_enable_color
+
+# CHROOT need /proc and /dev mounted
+[[ -e /proc/self/mountinfo ]] || die "/proc must be mounted!"
+[[ -e /dev/fd ]] || die "/dev must be mounted!"
+
+KERNELVERSION=$(resolve_kernver "$KERNELVERSION") || cleanup 1
+_d_kmoduledir=/lib/modules/$KERNELVERSION
+[[ -d $_d_kmoduledir ]] || die "'$_d_kmoduledir' is not a valid kernel module directory"
+
+_d_workdir=$(initialize_buildroot "$KERNELVERSION") || cleanup 1
+BUILDROOT=$_d_workdir/root
+
+msg "Starting build: %s" "$KERNELVERSION"
+
+# set functrace and trap to catch errors in add_* functions
+declare -i _builderrors=0
+set -o functrace
+trap '(( $? )) && [[ $FUNCNAME = add_* ]] && (( ++_builderrors ))' RETURN
+
+# prime the _addedmodules list with the builtins for this kernel
+if [[ -r $_d_kmoduledir/modules.builtin ]]; then
+    while IFS=/ read -a path; do
+        modname=${path[-1]%.ko}
+        _addedmodules["${modname//-/_}"]=2
+    done <"$_d_kmoduledir/modules.builtin"
+    unset modname path
+fi
+
+# vim: set ft=sh ts=2 sw=2 et:

@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# switch out the error handler to catch all errors
+trap -- RETURN
+trap '(( ++_builderrors ))' ERR
+set -o errtrace
+
+install_modules "${!_modpaths[@]}"
+
+# unset errtrace and trap
+set +o functrace
+set +o errtrace
+trap -- ERR
+
+# this is simply a nice-to-have -- it doesn't matter if it fails.
+ldconfig -r "$BUILDROOT" &>/dev/null
+
+if [ -z "$1" ]; then
+  error "First parameter should be a path to initrd output file"
+  return 1
+fi
+out=$(realpath $1) errmsg=
+pipesave=( ) cpio_opts=( )
+
+msg "Creating lz4-compressed initcpio image: %s" "$out"
+
+cpio_opts=('-0' '-o' '-H' 'newc')
+(( _optquiet )) && cpio_opts+=('--quiet')
+if (( EUID != 0 )); then
+    warning 'Not building as root, ownership cannot be preserved'
+    cpio_opts+=('-R' '0:0')
+fi
+
+echo "will write $BUILDROOT into cpio $out"
+pushd "$BUILDROOT" >/dev/null
+find -mindepth 1 -printf '%P\0' |
+        LANG=C bsdcpio "${cpio_opts[@]}" |
+        lz4 -1 -l > "$out"
+pipesave=("${PIPESTATUS[@]}") # save immediately
+popd >/dev/null
+
+if (( pipesave[0] )); then
+    errmsg="find reported an error"
+elif (( pipesave[1] )); then
+    errmsg="bsdcpio reported an error"
+elif (( pipesave[2] )); then
+    errmsg="$compress reported an error"
+fi
+
+if (( _builderrors )); then
+    warning "errors were encountered during the build. The image may not be complete."
+fi
+
+if [[ $errmsg ]]; then
+    error "Image generation FAILED: %s" "$errmsg"
+elif (( _builderrors == 0 )); then
+    msg "Image generation successful"
+fi
+
+exit 3
+#cleanup $(( !!_builderrors ))
+
+# vim: set ft=sh ts=2 sw=2 et:

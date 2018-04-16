@@ -1,0 +1,36 @@
+#!/bin/bash
+# This script summarize a typical archlinux installation with "archiso" package in order to build arcoreos 
+# new ArchVM : Network bridge mode, 2,5G Ram, 25G dynamic VDI Disk
+cfdisk /dev/sda
+# easy MBR full primary partition with bootable flag (fdisk o n CRCRCR a w)
+mkfs.btrfs /dev/sda1
+# maybe reboot to get btrfs module at start from autodetect
+mount /dev/sda1 /mnt
+pacman -Sy
+pacstrap /mnt base archiso btrfs-progs grub openssh
+arch-chroot /mnt
+passwd
+# set a stupid password : a
+cat > /etc/systemd/network/50-wired.network << FILE
+[Match]
+Name=enp0s3
+
+[Network]
+DHCP=ipv4
+FILE
+systemctl enable systemd-networkd
+systemctl enable systemd-resolved
+umount /etc/resolv.conf
+rm /etc/resolv.conf
+ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+
+echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+systemctl enable sshd
+
+grub-mkconfig -o /boot/grub/grub.cfg
+grub-install /dev/sda
+
+exit
+reboot
+
+# then ssh root@IP to control the VM

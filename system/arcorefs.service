@@ -1,0 +1,14 @@
+[Unit]
+Description=Remote units : DL archive from kernel cmd line
+Documentation=man:sulogin(8)
+DefaultDependencies=no
+Requires=sysinit.target arcorenet.service
+After=systemd-resolved.service network-online.target
+Before=initrd-root-fs.target
+ConditionPathExists=!/oksysroot
+
+[Service]
+Type=oneshot
+WorkingDirectory=-/root
+ExecStart=/usr/bin/bash /usr/bin/arcore_fs.sh
+Restart=no

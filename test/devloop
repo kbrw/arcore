@@ -1,0 +1,16 @@
+#!/bin/bash
+
+## Need a VM to build arcoreOS: it's ip is the first command line argument
+### Typically, an Archlinux with archiso and btrfs-progs (see installbuilder script)
+## Need a VM to boot arcoreOS named arcorevm
+### with 2 network interfaces and 4 hard drives, the 1st net iface is a "vbox private network" and the 2nd one is "bridge adapter"
+### first boot should be PXE
+
+MODULES="intel_powerclamp crct10dif_pclmul crc32_pclmul ghash_clmulni_intel vboxvideo pcbc ttm drm_kms_helper aesni_intel aes_x86_64 crypto_simd glue_helper cryptd drm intel_rapl_perf rtc_cmos psmouse joydev pcspkr input_leds mousedev led_class syscopyarea sysfillrect snd_intel8x0 sysimgblt fb_sys_fops evdev e1000 intel_agp snd_ac97_codec ac97_bus snd_pcm snd_timer snd soundcore battery intel_gtt mac_hid agpgart ac i2c_piix4 ip_tables x_tables hid_generic usbhid hid btrfs xor zstd_decompress zstd_compress xxhash raid6_pq sd_mod sr_mod cdrom ata_generic pata_acpi serio_raw atkbd libps2 ohci_pci ehci_pci crc32c_intel ata_piix ahci libahci ehci_hcd ohci_hcd libata usbcore usb_common scsi_mod i8042 serio raid0"
+scp -r ../arcore root@$1: 
+ssh root@$1 "cd arcore; bash ./build_arcore /boot/vmlinuz-linux \"$MODULES\""
+scp root@$1:/boot/vmlinuz-linux test/bin/arcore-kernel
+scp root@$1:arcore/build/arcore.img test/bin/arcore.img
+VBoxManage controlvm arcorevm poweroff
+sleep 3
+VBoxManage startvm arcorevm

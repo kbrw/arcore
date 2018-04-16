@@ -1,0 +1,11 @@
+[Unit]
+Description=Arcore default unit
+Documentation=man:systemd.special(7)
+#Requires=sysinit.target debug.service
+#After=sysinit.target debug.service
+#Requires=initrd.target debug.service
+#After=initrd.target debug.service
+Requires=debug.service
+#After=debug.service
+#Wants=cryptsetup.target
+AllowIsolate=yes

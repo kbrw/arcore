@@ -1,0 +1,10 @@
+[Unit]
+Description=Remote units : DL archive from kernel cmd line
+Documentation=man:sulogin(8)
+DefaultDependencies=no
+Requires=sysinit.target systemd-networkd.service systemd-resolved.service network-online.target
+Before=systemd-resolved.service systemd-networkd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /usr/bin/arcore_net.sh
