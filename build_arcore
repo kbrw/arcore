@@ -66,11 +66,12 @@ map add_binary \
     mdadm \
     mkfs.btrfs \
     btrfs \
-    /usr/bin/networkctl \
-    /usr/bin/nologin \
-    /sbin/nologin \
-    /usr/bin/systemd-tmpfiles \
-    /usr/bin/journalctl \
+    networkctl \
+    nologin \
+    systemd-tmpfiles \
+    journalctl \
+    jq \
+    runc \
     /usr/lib/systemd/systemd-hibernate-resume \
     /usr/lib/systemd/systemd-sulogin-shell \
     /usr/lib/systemd/system-generators/systemd-fstab-generator \
