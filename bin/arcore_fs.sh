@@ -56,7 +56,7 @@ cp /init /usr/bin/init
 rm -f /sysroot/usr/lib/systemd/system/default.target
 #ln -s multi-user.target /sysroot/usr/lib/systemd/system/default.target 
 #ln -s emergency.target /sysroot/usr/lib/systemd/system/default.target
-ln -s /etc/systemd/system/arcore.target /sysroot/usr/lib/systemd/system/default.target
+ln -s arcore.target /sysroot/usr/lib/systemd/system/default.target
 
 DOINSTALL=false
 for_each_cmdline() {
