@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# export a sane PATH, remove ./bin because now "." will be root FS
+export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
 # switch out the error handler to catch all errors
 trap -- RETURN
 trap '(( ++_builderrors ))' ERR

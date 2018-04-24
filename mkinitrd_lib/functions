@@ -595,7 +595,6 @@ add_binary() {
     ###### ONLY Change for arcore build ####
     if [[ "$dest" == ./bin/* ]]; then
       dest="/usr/$dest"
-      echo "!!!! replace DEST to $dest"
     fi
     ###### END ONLY Change              ####
     mode=$(stat -c %a "$binary")
