@@ -24,13 +24,10 @@ fi
 ###              - use "add_systemd_unit" to copy a systemd unit file from systemd searchpath into BUILDROOT, each systemd deps trigger an other `add_systemd_unit`, each program deps a `add_binary`
 # Now... have fun and build your OS
 
-add_binary /bin/mount
-add_binary /usr/bin/kmod /usr/bin/modprobe
 add_binary /usr/lib/systemd/systemd /init
-add_binary /usr/bin/sulogin
 
-add_binary /usr/lib/initcpio/busybox /bin/busybox
-for applet in $(/usr/lib/initcpio/busybox --list | grep -v less); do
+add_binary busybox
+for applet in $(busybox --list | grep -v busybox); do
     add_symlink "/usr/bin/$applet" busybox
 done
 
@@ -38,7 +35,7 @@ add_file files/system.conf /etc/systemd/system.conf
 # for less color to work properly with default TERM=linux
 add_file /usr/lib/terminfo/l/linux
 # for lspci to find User readable hardware desc from kernel pci modalias
-add_file /usr/share/hwdata/pci.ids
+#add_file /usr/share/hwdata/pci.ids
 
 case "$2" in
   "allmodules")
@@ -54,30 +51,24 @@ esac
 
 map add_binary \
     bash \
-    less \
-    find \
-    getent \
-    pwck \
-    grpck \
-    lspci \
-    gzip \
-    tar \
     curl \
+    less \
+    sulogin \
+    nologin \
     mdadm \
     mkfs.btrfs \
     btrfs \
-    networkctl \
-    nologin \
-    systemd-tmpfiles \
-    journalctl \
     jq \
     runc \
     /usr/lib/systemd/systemd-hibernate-resume \
     /usr/lib/systemd/systemd-sulogin-shell \
     /usr/lib/systemd/system-generators/systemd-fstab-generator \
     /usr/lib/systemd/system-generators/systemd-gpt-auto-generator \
-    /usr/lib/systemd/system-generators/systemd-hibernate-resume-generator
-    /usr/lib/systemd/system-generators/systemd-getty-generator
+    /usr/lib/systemd/system-generators/systemd-hibernate-resume-generator \
+    /usr/lib/systemd/system-generators/systemd-getty-generator \
+    systemd-tmpfiles \
+    networkctl \
+    journalctl
 
 # for setup only !
 map add_binary \
@@ -163,6 +154,8 @@ add_binary "/usr/lib/libnss_mymachines.so.2"
 add_binary "/usr/lib/libnss_resolve.so.2"
 
 map add_binary \
+    runcget \
+    arcore_lib.sh \
     arcore_net.sh \
     arcore_fs.sh \
     arcore_alert.sh
