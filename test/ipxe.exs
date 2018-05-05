@@ -34,7 +34,7 @@ defmodule Conf do
     #kernel ${base-url}/arcore-kernel initrd=arcore.img vconsole.keymap=fr arcore.net="[Match]\\nName=eth0\\n[Network]\\nDHCP=ipv4" arcore.net="[Match]\\nName=eth1\\n[Network]\\nDHCP=ipv4" arcore.fs=http://#{srv_ip_str}/hostfs systemd.log_level=debug systemd.log_target=console
     #kernel ${base-url}/arcore-kernel initrd=arcore.img vconsole.keymap=fr arcore.net="[Match]\\nName=eth0\\n[Network]\\nDHCP=ipv4" arcore.net="[Match]\\nName=eth1\\n[Network]\\nDHCP=ipv4" arcore.fs=http://#{srv_ip_str}/hostfs
     #kernel ${base-url}/arcore-kernel initrd=arcore.img vconsole.keymap=fr arcore.net="[Match]\\nName=eth0\\n[Network]\\nDHCP=ipv4" arcore.net="[Match]\\nName=eth1\\n[Network]\\nDHCP=ipv4" arcore.fs=http://#{srv_ip_str}/hostfs arcore.install arcore.alert=http://#{srv_ip_str}/alert
-    kernel ${base-url}/arcore-kernel initrd=arcore.img vconsole.keymap=fr arcore.net="[Match]\\nName=eth0\\n[Network]\\nDHCP=ipv4" arcore.net="[Match]\\nName=eth1\\n[Network]\\nDHCP=ipv4" arcore.fs=http://#{srv_ip_str}/hostfs arcore.alert=http://#{srv_ip_str}/alert
+    kernel ${base-url}/arcore-kernel initrd=arcore.img vconsole.keymap=fr arcore.net="[Match]\\nName=eth0\\n[Network]\\nDHCP=ipv4" arcore.net="[Match]\\nName=eth1\\n[Network]\\nDHCP=ipv4" arcore.fs=http://#{srv_ip_str}/hostfs rcore.install arcore.alert=http://#{srv_ip_str}/alert
     initrd ${base-url}/arcore.img
     boot    
     """
@@ -59,12 +59,16 @@ defmodule Conf do
     to_tgz %{
       "/install.sh"=> """
       echo "hello ARCORE Host installation"
-      mdadm --create --verbose /dev/md0 --level=0 --raid-devices=2 /dev/sda /dev/sdb
-      mkfs.btrfs /dev/md0
-      mdadm --create --verbose /dev/md1 --level=0 --raid-devices=2 /dev/sdc /dev/sdd
-      mkfs.btrfs /dev/md1
-      mdadm --detail --scan
+      wipefs -t btrfs /dev/sda /dev/sdb
+      wipefs -t btrfs /dev/sdc /dev/sdd
+      mkfs.btrfs -f -d raid0 /dev/sda /dev/sdb
+      mkfs.btrfs -f -d raid0 /dev/sdc /dev/sdd
+      mkdir tmpmount
+      mount /dev/sda tmpmount
+      mkdir -p tmpmount/log/journal
+      umount tmpmount
       """,
+      "/etc/machine-id"=> "113084c8cf1147c3a81036b3313ebf3c",
       "/etc/udev/rules.d/99-ovh.rules"=> """
       ACTION=="add", SUBSYSTEM=="net", KERNEL=="eth0", NAME:="vrack"
       ACTION=="add", SUBSYSTEM=="net", KERNEL=="eth1", NAME:="public"
@@ -84,26 +88,86 @@ defmodule Conf do
         """
       },
       "/etc/systemd/system"=>%{
+        "kbrw-paas.service"=>"""
+        [Unit]
+        Description=Kbrw PAAS Orchestrator
+        After=systemd-resolved.service network-online.target
+        
+        [Service]
+        Type=forking
+        StateDirectory=kbrw-paas
+        WorkingDirectory=-/var/lib/kbrw-paas
+        Environment=S=192.168.56.1:7181
+        ExecStartPre=-/usr/bin/runcget ${S}/iterate.tgz ${S}/base.tgz ${S}/elixir.tgz
+        ExecStart=/usr/local/bin/runc run -d --pid-file /run/kbrw-paas.pid kbrw-paas
+        ExecStopPost=/usr/local/bin/runc delete kbrw-paas
+        PIDFile=/run/kbrw-paas.pid
+        """,
         "mnt-hdd.mount"=>"""
         [Mount]
-        What=/dev/md0
+        What=/dev/sda
         Where=/mnt/hdd
+        [Unit]
+        Requires=var-cache.mount var-tmp.mount var-spool.mount var-lib.mount var-log.mount
         """,
         "mnt-ssd.mount"=>"""
         [Mount]
-        What=/dev/md1
+        What=/dev/sdc
         Where=/mnt/ssd
+        [Unit]
+        Before=local-fs.target
+        """,
+        "var-cache.mount"=>"""
+        [Mount]
+        What=/mnt/hdd/cache
+        Where=/var/cache
+        Type=none
+        Options=bind
+        [Unit]
+        Before=local-fs.target
+        """,
+        "var-tmp.mount"=>"""
+        [Mount]
+        What=/mnt/hdd/tmp
+        Where=/var/tmp
+        Type=none
+        Options=bind
+        [Unit]
+        Before=local-fs.target
+        """,
+        "var-spool.mount"=>"""
+        [Mount]
+        What=/mnt/hdd/spool
+        Where=/var/spool
+        Type=none
+        Options=bind
+        [Unit]
+        Before=local-fs.target
+        """,
+        "var-log.mount"=>"""
+        [Mount]
+        What=/mnt/hdd/log
+        Where=/var/log
+        Type=none
+        Options=bind
+        [Unit]
+        Before=local-fs.target
+        """,
+        "var-lib.mount"=>"""
+        [Mount]
+        What=/mnt/hdd/lib
+        Where=/var/lib
+        Type=none
+        Options=bind
         """,
         "local-fs.target.requires"=>%{
           "mnt-hdd.mount"=> {:link,"../mnt-hdd.mount"},
           "mnt-ssd.mount"=> {:link,"../mnt-hdd.mount"},
+        },
+        "arcore.target.requires"=>%{
+          "kbrw-paas.service"=> {:link,"../kbrw-paas.service"}
         }
-      },
-      "/etc/mdadm/mdadm.conf"=> """
-        DEVICE partitions
-        ARRAY /dev/md0 metadata=1.2 name=archlinux:0 UUID=f21f7807:7059b2f0:a8379986:fb286f7b
-        ARRAY /dev/md1 metadata=1.2 name=archlinux:1 UUID=7ea3fdc7:f392080a:639dd512:686746e0
-        """
+      }
     }
   end
 
@@ -119,7 +183,6 @@ defmodule Conf do
           :ok = File.ln_s(link,tmp<>"/"<>path)
       end
     end)
-    IO.puts tmp
     {_,0} = System.cmd("tar",["czf","archive.tgz"] ++ Enum.map(Path.wildcard(tmp<>"/*"),&String.replace(&1,tmp,".")),into: IO.stream(:stdio,:line), cd: tmp)
     ret = File.read!(tmp<>"/archive.tgz")
     #File.rm_rf!(tmp)
@@ -160,7 +223,7 @@ defmodule PXE.HTTP do
           send_chunks(body,conn)
         "POST "<>rest->
           [path,_] = String.split(rest," ", parts: 2)
-          IO.puts "HTTP query for #{path}"
+          IO.puts "POST query for #{path}"
           [_,body] = String.split(rest,"\r\n\r\n",parts: 2)
           IO.puts body
           :gen_tcp.send(conn, "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\nOK")
@@ -315,7 +378,7 @@ defmodule PXE.DHCP do
 
     def handle_info({:udp,sock,_ip,68,bin},%{sock: sock}=s) do
       packet = Packet.decode_packet(bin)
-      IO.puts "receive DHCP #{inspect(packet, pretty: true, limit: :infinity)}\n\n\n"
+      #IO.puts "receive DHCP #{inspect(packet, pretty: true, limit: :infinity)}\n\n\n"
       case packet do
         %{msg_type: :discover,options: %{class_id: "PXEClient:"<>_}}-> #PXEBoot, return PXE message
           send_packet(offer_pxe_packet(packet.xid,Lease.get(packet,s),s),s)
@@ -352,11 +415,11 @@ defmodule PXE.DHCP do
     defp send_packet(packet,%{sock: sock}) do
       enc_packet = Packet.encode_packet(packet)
       dest = dest_addr(packet)
-      IO.puts "send DHCP to #{inspect dest} #{inspect(packet, pretty: true, limit: :infinity)}\n\n\n"
+      #IO.puts "send DHCP to #{inspect dest} #{inspect(packet, pretty: true, limit: :infinity)}\n\n\n"
       case :gen_udp.send(sock, dest, 68, enc_packet) do
         :ok -> :ok
         {:error, reason} when reason in [:ehostdown,:ehostunreach]->
-          IO.puts("DHCP send to #{inspect dest} got #{inspect reason}, swith to broadcast")
+          #IO.puts("DHCP send to #{inspect dest} got #{inspect reason}, swith to broadcast")
           :gen_udp.send(sock, Conf.broadcast, 68, enc_packet)
       end
     end

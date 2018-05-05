@@ -7,30 +7,55 @@ function slugify_url(){
   echo "$1" | sed -r s/[^a-zA-Z0-9]+/-/g | sed -r s/^-+\|-+$//g | tr A-Z a-z
 }
 ## This function take a layer_url and layer_path as parameter, it extracts layer_url TGZ into layer_path handling HTTP ETag cache
-function cache_layer_if_changed(){
-  local layer_url=$1 layer_path=$2
-  mkdir -p "$layer_path"
-  if [ -f "$layer_path/etag" ]; then
-    tgz=$(mktemp)
-    if ! curl -v --dump-header "$layer_path/headers" -H'If-None-Match: "'$(cat "$layer_path/etag")'"' "$layer_url" 2>&1 > "$tgz" | grep "HTTP\/1.1 304" > /dev/null; then
-      echo "The layer $layer_url exists did changed : update it" 
-      tar -xvzC "$layer_path" -f "$tgz"
+function mount_btrfs(){
+  previouslayer=""
+  for layer_url in "$@"
+  do
+    echo "next curl to '$layer_url'"
+    dir=$(slugify_url "$layer_url")
+    layer_path="/var/lib/runcget/$dir"
+    mkdir -p "/var/lib/runcget"
+    if [ -f "$layer_path/etag" ]; then
+      tgz=$(mktemp)
+      if ! curl -v --dump-header "$layer_path/headers" -H'If-None-Match: "'$(cat "$layer_path/etag")'"' "$layer_url" 2>&1 > "$tgz" | grep "HTTP\/1.1 304" > /dev/null; then
+        btrfs subvolume delete "$layer_path"
+        if [ "$previouslayer" = "" ]; then
+          btrfs subvolume create "$layer_path"
+        else
+          btrfs subvolume snapshot "$previouslayer" "$layer_path"
+        fi
+        echo "The layer $layer_url exists did changed : update it"
+        tar -xvzC "$layer_path" -f "$tgz"
+        cat "$layer_path/headers" | grep -i "etag" | sed -e's/^[^:]*:\s*"\?\([^"]*\)"\?\s*$/\1/' > "$layer_path/etag"
+      fi
+      rm "$tgz"
+    else
+      echo "The layer $layer_url does not exist : create it"
+      if [ "$previouslayer" = "" ]; then
+        btrfs subvolume create "$layer_path"
+      else
+        echo "will exec "
+        echo btrfs subvolume snapshot "$previouslayer" "$layer_path"
+        btrfs subvolume snapshot "$previouslayer" "$layer_path"
+        echo "after exec"
+      fi
+      curl --dump-header "$layer_path/headers" "$layer_url" | tar -xvzC "$layer_path" -f -
       cat "$layer_path/headers" | grep -i "etag" | sed -e's/^[^:]*:\s*"\?\([^"]*\)"\?\s*$/\1/' > "$layer_path/etag"
     fi
-    rm "$tgz"
-  else
-    echo "The layer $layer_url does not exist : create it" 
-    curl --dump-header "$layer_path/headers" "$layer_url" | tar -xvzC "$layer_path" -f -
-    cat "$layer_path/headers" | grep -i "etag" | sed -e's/^[^:]*:\s*"\?\([^"]*\)"\?\s*$/\1/' > "$layer_path/etag"
+    previouslayer="$layer_path"
+  done
+  if [ -d "./rootfs" ]; then
+    btrfs subvolume delete "./rootfs"
   fi
+  btrfs subvolume snapshot "$previouslayer" "./rootfs"
 }
 
+echo "first curl to '$1'"
 curl "$1" | tar -xvzC ./ -f -
 shift
-for layer_tgz_url in "$@"
-do
-  layer_path="/var/lib/runcget/"$(slugify_url "$layer_tgz_url")
-  #layer_path="/tmp/runcget/"$(slugify_url "$layer_tgz_url")
-  cache_layer_if_changed "$layer_tgz_url" "$layer_path"
-done
-# $(stat -f "--format=%T" .)
+mount_btrfs "$@"
+#case $(stat -f "--format=%T" /var/lib/runcget) in
+#  btrfs) mount_btrfs "$@" ;;
+#  *) mount_overlayfs "$@" ;;
+#esac
+# 

@@ -32,9 +32,14 @@ for_each_cmdline() {
 }
 parse_cmdline for_each_cmdline
 
+set +e
 if [ "$DOINSTALL" = "true" ] && [ -f /sysroot/install.sh ]; then
-  bash /sysroot/install.sh | bash /usr/bin/arcore_alert.sh
+  echo "will call install script"
+  #bash /sysroot/install.sh 2>&1 | bash /usr/bin/arcore_alert.sh
+  bash /sysroot/install.sh
+  echo "did call install script"
 fi
+set -e
 
 ## network has been configured in order to get rootfs overlay
 ## so remove all the kernel modules for net devices

@@ -58,16 +58,19 @@ map add_binary \
     mdadm \
     mkfs.btrfs \
     btrfs \
+    wipefs \
     jq \
     runc \
     /usr/lib/systemd/systemd-hibernate-resume \
     /usr/lib/systemd/systemd-sulogin-shell \
+    /usr/lib/systemd/systemd-shutdown \
     /usr/lib/systemd/system-generators/systemd-fstab-generator \
     /usr/lib/systemd/system-generators/systemd-gpt-auto-generator \
     /usr/lib/systemd/system-generators/systemd-hibernate-resume-generator \
     /usr/lib/systemd/system-generators/systemd-getty-generator \
     systemd-tmpfiles \
     networkctl \
+    systemd-analyze \
     journalctl
 
 # for setup only !
@@ -101,6 +104,9 @@ map add_systemd_unit \
         local-fs-pre.target \
         paths.target \
         reboot.target \
+        halt.target \
+        poweroff.target \
+        kexec.target \
         rescue.service \
         emergency.service \
         slices.target \
@@ -110,6 +116,7 @@ map add_systemd_unit \
         systemd-hibernate-resume@.service \
         systemd-sysusers.service \
         systemd-journald.service \
+        systemd-journal-flush.service \
         systemd-journald-audit.socket \
         systemd-journald-dev-log.socket \
         systemd-modules-load.service \
